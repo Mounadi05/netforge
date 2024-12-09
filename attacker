@@ -1,0 +1,27 @@
+
+FROM ubuntu:latest
+
+RUN apt-get update && apt-get install gcc -y
+
+RUN apt install iproute2 -y && apt-get install inetutils-ping -y && apt-get install tshark -y
+
+RUN apt-get install -y libcap2-bin
+
+RUN apt-get install sudo -y
+
+RUN apt-get install net-tools -y
+
+RUN groupadd -r mounadi && \
+    useradd -r -g mounadi -s /bin/bash mounadi
+
+RUN echo "mounadi ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+usermod -aG sudo mounadi
+
+RUN setcap cap_net_raw,cap_net_admin=eip /usr/bin/dumpcap
+
+USER mounadi
+
+WORKDIR /home/mounadi
+
+COPY ./inquisitor.c /home/mounadi/inquisitor.c
+CMD /bin/bash

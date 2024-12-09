@@ -1,0 +1,11 @@
+
+FROM ubuntu:latest
+
+RUN apt-get update && apt-get install -y ftp 
+
+RUN apt-get install inetutils-ping -y
+
+RUN apt install iproute2 -y
+
+CMD /bin/bash
+

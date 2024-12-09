@@ -1,0 +1,44 @@
+version: '3.7'
+
+networks:
+  ftp-net:
+    driver: bridge
+
+services:
+  ftp-server:
+    build:
+      dockerfile: ftp-server
+    ports:
+      - "21:21"
+      - "21100-21110:21100-21110"
+    networks:
+      - ftp-net
+    environment:
+      - FTP_USER=mounadi
+      - FTP_PASS=test06
+    restart: always
+ 
+
+  client:
+    build:
+      dockerfile: client
+    depends_on:
+      - ftp-server
+    networks:
+      - ftp-net
+    stdin_open: true
+    tty: true
+  
+  attacker:
+    build:
+      dockerfile: attacker
+    privileged: true
+    depends_on:
+      - ftp-server
+    networks:
+      - ftp-net
+    stdin_open: true
+    tty: true
+
+
+
