@@ -78,12 +78,14 @@ int main(int ac , char **av) {
 		bzero(&servaddr, sizeof(servaddr)); 
 		// assign IP, PORT 
 		servaddr.sin_family = AF_INET; 
-		servaddr.sin_addr.s_addr = htonl(2130706433); //127.0.0.1
+		servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 		servaddr.sin_port = htons(atoi(av[1])); 
 		// Binding newly created socket to given IP and verification 
 		if ((bind(sockfd, (const struct sockaddr *)&servaddr, sizeof(servaddr))) != 0) 
 			ft_error();
 		if (listen(sockfd, 128) != 0) ft_error();
+		pritnf("\t\t --- Chat Server ---\n");
+		pritnf("\n\nServer is running on port %s\n",av[1]);
 		FD_SET(sockfd,&cur);
 		int max = sockfd;
 		int index = 0;
