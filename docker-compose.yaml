@@ -6,6 +6,7 @@ networks:
 
 services:
   ftp-server:
+    container_name: ftp-server
     build:
       dockerfile: ftp-server
     ports:
@@ -18,8 +19,19 @@ services:
       - FTP_PASS=test06
     restart: always
  
+  client1:
+    container_name: client1
+    build:
+      dockerfile: client
+    depends_on:
+      - ftp-server
+    networks:
+      - ftp-net
+    stdin_open: true
+    tty: true
 
-  client:
+  client2:
+    container_name: client2
     build:
       dockerfile: client
     depends_on:
@@ -30,6 +42,7 @@ services:
     tty: true
   
   attacker:
+    container_name: attacker
     build:
       dockerfile: attacker
     privileged: true
@@ -39,6 +52,16 @@ services:
       - ftp-net
     stdin_open: true
     tty: true
+  
+  chat-server:
+    container_name: chat-server
+    build:
+      dockerfile: chat-server
+    ports:
+      - "9099:9099"
+    networks:
+      - ftp-net
+    restart: always
 
 
 
