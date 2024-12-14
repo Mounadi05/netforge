@@ -1,11 +1,12 @@
-
 FROM ubuntu:latest
 
 RUN apt-get update && apt-get install -y ftp 
 
 RUN apt-get install inetutils-ping -y
 
-RUN apt install iproute2 -y
+RUN apt install -y iproute2 -y
+
+RUN apt-get install -y netcat-openbsd
 
 CMD /bin/bash
 

