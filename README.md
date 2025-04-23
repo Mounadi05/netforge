@@ -34,6 +34,7 @@ The `inquisitor.c` program is a custom ARP spoofing tool that:
 2. Intercepts network traffic between victims
 3. Can display packet contents in verbose mode
 4. Requires a network interface to be specified as a command-line argument
+5. Runs in a multi-threaded mode to both spoof and sniff simultaneously
 
 ## Getting Started
 
