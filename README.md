@@ -1,10 +1,10 @@
-# ARP-SPOF (ARP Spoofing Demonstration)
+# NetForge (ARP Spoofing Demonstration)
 
 A containerized environment for demonstrating ARP spoofing attacks and network security vulnerabilities.
 
 ## Overview
 
-ARP-SPOF is an educational project that creates a controlled environment to demonstrate ARP spoofing attacks and their impact on network security. The project uses Docker containers to simulate a network with multiple clients, an FTP server, a chat server, and an attacker machine.
+NetForge is an educational project that creates a controlled environment to demonstrate ARP spoofing attacks and their impact on network security. The project uses Docker containers to simulate a network with multiple clients, an FTP server, a chat server, and an attacker machine.
 
 ## Features
 
@@ -34,7 +34,6 @@ The `inquisitor.c` program is a custom ARP spoofing tool that:
 2. Intercepts network traffic between victims
 3. Can display packet contents in verbose mode
 4. Requires a network interface to be specified as a command-line argument
-5. Runs in a multi-threaded mode to both spoof and sniff simultaneously
 
 ## Getting Started
 
@@ -48,8 +47,8 @@ The `inquisitor.c` program is a custom ARP spoofing tool that:
 
 1. Clone the repository:
    ```
-   git clone https://github.com/mounadi05/arp-spof.git
-   cd arp-spof
+   git clone https://github.com/mounadi05/netforge.git
+   cd netforge
    ```
 
 2. Build and start the containers:
