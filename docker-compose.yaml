@@ -16,7 +16,7 @@ services:
       - ftp-net
     environment:
       - FTP_USER=mounadi
-      - FTP_PASS=test06
+      - FTP_PASS=te1234st
     restart: always
  
   client1:
